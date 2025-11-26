@@ -1,0 +1,286 @@
+openapi: 3.0.3
+info:
+  title: Clinic Appointment API
+  version: 1.0.0
+  description: REST API for Clinic Appointment Management System (core endpoints)
+servers:
+  - url: https://api.example.com
+    description: Production server (replace with actual)
+  - url: http://localhost:8080
+    description: Local dev
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Role:
+      type: string
+      enum: [ADMIN, DOCTOR, PATIENT]
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 64b6f4a3b8f2d9b1a2c3d4e5
+        name:
+          type: string
+          example: Hassan Salemeh
+        email:
+          type: string
+          format: email
+          example: hassan@example.com
+        role:
+          $ref: '#/components/schemas/Role'
+    Doctor:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            specialty:
+              type: string
+              example: General Practitioner
+            availability:
+              type: array
+              items:
+                $ref: '#/components/schemas/Availability'
+    Availability:
+      type: object
+      properties:
+        dayOfWeek:
+          type: string
+          example: "MONDAY"
+        startTime:
+          type: string
+          example: "09:00"
+        endTime:
+          type: string
+          example: "12:00"
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 64b7a1b2c3d4e5f67890abcd
+        doctorId:
+          type: string
+        patientId:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+          example: 2025-11-26T09:00:00Z
+        endTime:
+          type: string
+          format: date-time
+          example: 2025-11-26T09:20:00Z
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, CANCELLED, COMPLETED]
+        reason:
+          type: string
+          example: Follow-up
+  responses:
+    Unauthorized:
+      description: Missing or invalid auth
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user (patient or doctor)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                password:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/Role'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation error
+  /auth/login:
+    post:
+      summary: Authenticate a user and return JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /doctors:
+    get:
+      summary: List doctors
+      responses:
+        '200':
+          description: Array of doctors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Doctor'
+  /doctors/{id}:
+    get:
+      summary: Get doctor profile by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Doctor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Doctor'
+  /appointments:
+    get:
+      summary: List appointments (filter by doctorId or patientId or date)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: doctorId
+          in: query
+          schema:
+            type: string
+        - name: patientId
+          in: query
+          schema:
+            type: string
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Array of appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Appointment'
+    post:
+      summary: Create an appointment (protected)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [doctorId, startTime, endTime]
+              properties:
+                doctorId:
+                  type: string
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+      responses:
+        '201':
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+        '409':
+          description: Conflict (double booking)
+  /appointments/{id}:
+    get:
+      summary: Get appointment by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Appointment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+    put:
+      summary: Update appointment (status changes, reschedule)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                status:
+                  type: string
+                  enum: [PENDING, CONFIRMED, CANCELLED, COMPLETED]
+      responses:
+        '200':
+          description: Appointment updated
+    delete:
+      summary: Cancel appointment
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted
+security:
+  - bearerAuth: []
